@@ -1,0 +1,38 @@
+{
+  "name": "zametki",
+  "productName": "Заметки",
+  "version": "1.4.0",
+  "description": "Заметки, списки и доски для Windows",
+  "main": "main.js",
+  "author": "Zametki",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check board.js && node --check app.js",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.local.zametki",
+    "productName": "Заметки",
+    "compression": "maximum",
+    "electronLanguages": ["en-US", "ru"],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
