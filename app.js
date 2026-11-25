@@ -419,15 +419,40 @@ function updateGridWidth() {
   let gw;
   if (state.settings.view === 'list') gw = Math.min(600, w);
   else { const cols = Math.max(1, Math.floor((w + 16) / 256)); gw = cols * 256 - 16; }
-  $('#content').style.setProperty('--gw', gw + 'px');
+  const content = $('#content');
+  const width = `${gw}px`;
+  if (content.style.getPropertyValue('--gw') !== width) content.style.setProperty('--gw', width);
+}
+
+let gridWidthFrame = null;
+function scheduleGridWidthUpdate() {
+  if (gridWidthFrame !== null) return;
+  gridWidthFrame = requestAnimationFrame(() => {
+    gridWidthFrame = null;
+    updateGridWidth();
+  });
 }
 
 const ROW = 4, GAP = 16;
 function sizeCard(card) {
   const h = card.getBoundingClientRect().height;
-  card.style.gridRowEnd = `span ${Math.ceil((h + GAP) / ROW)}`;
+  const rowEnd = `span ${Math.ceil((h + GAP) / ROW)}`;
+  if (card.style.gridRowEnd !== rowEnd) card.style.gridRowEnd = rowEnd;
 }
-const cardRO = new ResizeObserver((entries) => entries.forEach((e) => sizeCard(e.target)));
+
+const cardsToSize = new Set();
+let cardSizeFrame = null;
+const cardRO = new ResizeObserver((entries) => {
+  entries.forEach(({ target }) => cardsToSize.add(target));
+  if (cardSizeFrame !== null) return;
+  cardSizeFrame = requestAnimationFrame(() => {
+    cardSizeFrame = null;
+    cardsToSize.forEach((card) => {
+      if (card.isConnected) sizeCard(card);
+    });
+    cardsToSize.clear();
+  });
+});
 
 function chipsHTML(n, removable, inEditor = false) {
   let h = '';
@@ -2374,7 +2399,7 @@ function bindEvents() {
     else if (e.key === '/' || e.code === 'Slash') { e.preventDefault(); $('#search').focus(); }
   });
 
-  new ResizeObserver(updateGridWidth).observe($('#main'));
+  new ResizeObserver(scheduleGridWidthUpdate).observe($('#main'));
 
   window.api.onOpenNote((id) => {
     const n = getNote(id);
