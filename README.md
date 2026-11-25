@@ -16,6 +16,6 @@ npm install
 npm run dev
 ```
 
-Проверка JavaScript: `npm run check`. Сборка Windows-установщика: `npm run dist`.
+Проверка JavaScript: `npm run check`. Сборка Windows-установщика: `npm run dist`. Для Linux в [GitHub Actions](.github/workflows/windows-installer.yml) устанавливается Wine; готовый `.exe` доступен как артефакт сборки.
 
 Доски сохраняются локально вместе с заметками. На холсте можно добавлять стикеры, текст и фигуры, перемещать элементы, менять цвета и связывать идеи.
