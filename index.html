@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Заметки</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg-layer" id="bgLayer"></div>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-logo drag"><img src="icon.png" alt=""></div>
+      <nav class="rail-nav" id="railNav"></nav>
+      <div class="rail-bottom">
+        <button class="icon-btn" id="bgBtn" title="Фон и оформление"></button>
+        <button class="icon-btn" id="themeToggle"></button>
+        <button class="icon-btn" id="appMenuBtn" title="Настройки"></button>
+      </div>
+    </aside>
+
+    <aside class="panel" id="panel">
+      <div class="panel-head drag">
+        <span class="panel-title">Мои заметки</span>
+        <div class="head-actions">
+          <button class="icon-btn small" id="panelAdd"></button>
+          <button class="icon-btn small" id="panelCollapse" title="Скрыть панель"></button>
+        </div>
+      </div>
+      <div class="panel-search" id="searchBox">
+        <span class="search-icon" id="searchIcon"></span>
+        <input id="search" type="text" placeholder="Поиск" autocomplete="off" spellcheck="false">
+        <button class="icon-btn tiny" id="clearSearch" title="Очистить поиск"></button>
+      </div>
+      <div class="seg" id="seg">
+        <button data-tab="folders">Папки</button>
+        <button data-tab="tags">Теги</button>
+      </div>
+      <div class="tree" id="tree"></div>
+    </aside>
+
+    <section class="main">
+      <header class="main-head drag">
+        <button class="icon-btn small" id="panelExpand" title="Показать панель"></button>
+        <div class="crumbs" id="crumbs"></div>
+        <div class="head-actions">
+          <button class="icon-btn small" id="viewToggle"></button>
+          <button class="icon-btn small" id="newNoteBtn" title="Новая заметка (C)"></button>
+        </div>
+        <div class="selbar" id="selbar">
+          <button class="icon-btn small" id="selClose" title="Отменить выбор"></button>
+          <span id="selCount"></span>
+          <div class="sel-actions" id="selActions"></div>
+        </div>
+      </header>
+      <div class="drop-hint" id="dropHint"></div>
+      <main id="main">
+        <div id="composerWrap"></div>
+        <div id="content"></div>
+      </main>
+      <section class="board-workspace" id="boardWorkspace" aria-label="Рабочая область доски" hidden>
+        <div class="board-toolbar">
+          <label class="board-title-wrap">
+            <span class="sr-only">Название доски</span>
+            <input id="boardTitle" type="text" maxlength="80" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="board-tools" role="toolbar" aria-label="Инструменты доски">
+            <button type="button" class="board-tool" data-board-action="add-sticky">+ Стикер</button>
+            <button type="button" class="board-tool" data-board-action="add-text">Текст</button>
+            <button type="button" class="board-tool" data-board-action="add-shape">Фигура</button>
+            <button type="button" class="board-tool" id="boardConnect" data-board-action="connect" aria-pressed="false">Связь</button>
+          </div>
+          <button type="button" class="board-delete" data-board-action="delete">Удалить доску</button>
+        </div>
+        <div class="board-canvas" id="boardCanvas" role="region" aria-label="Доска" tabindex="0">
+          <div class="board-world" id="boardWorld"></div>
+          <div class="board-empty-canvas">
+            <span class="board-empty-mark" aria-hidden="true"></span>
+            <strong>Начните с идеи</strong>
+            <span>Добавьте стикер, текст или фигуру. Перетаскивайте блоки и соединяйте их.</span>
+          </div>
+          <div class="board-hint" id="boardHint" role="status" aria-live="polite" hidden></div>
+          <div class="board-zoom-bar" aria-label="Масштаб доски">
+            <button type="button" data-board-action="zoom-out" aria-label="Уменьшить масштаб" title="Уменьшить масштаб">−</button>
+            <output id="boardZoom" aria-live="polite">100%</output>
+            <button type="button" data-board-action="zoom-in" aria-label="Увеличить масштаб" title="Увеличить масштаб">+</button>
+            <span class="board-zoom-divider" aria-hidden="true"></span>
+            <button type="button" data-board-action="fit" aria-label="Показать все элементы" title="Показать все элементы">Вписать</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+  <div id="modalRoot"></div>
+  <div id="popoverRoot"></div>
+  <div id="snackbar" class="snackbar"></div>
+  <input type="file" id="fileInput" accept="image/*" multiple hidden>
+  <script src="board.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
