@@ -20,6 +20,8 @@
   "build": {
     "appId": "com.local.zametki",
     "productName": "Заметки",
+    "compression": "maximum",
+    "electronLanguages": ["en-US", "ru"],
     "directories": {
       "output": "dist"
     },
