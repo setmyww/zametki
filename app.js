@@ -44,6 +44,7 @@ if (!window.api) {
 
 // ---------- Иконки (Material Icons, Apache 2.0) ----------
 const ICONS = {
+  calendar: 'M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM7 12h4v4H7z',
   board: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
   menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
@@ -115,7 +116,7 @@ const defaultState = () => ({
   settings: { view: 'grid', theme: 'dark', panelCollapsed: false, panelTab: 'folders', collapsedFolders: [], background: null, blur: 28, designV2: true },
 });
 let state = defaultState();
-const ui = { section: 'notes', labelId: null, folderId: null, boardId: null, restorePanelAfterBoard: false, search: '', selected: new Set() };
+const ui = { section: 'notes', labelId: null, folderId: null, boardId: null, restorePanelAfterBoard: false, calendarDate: new Date(), calendarPanelOpen: false, search: '', selected: new Set() };
 let sysInfo = { acrylicSupported: false };
 let cardDragId = null;
 
@@ -218,6 +219,15 @@ window.addEventListener('beforeunload', () => {
 // ---------- Форматирование дат ----------
 const fmtTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const sameCalendarDay = (a, b) => ymd(a) === ymd(b);
+function calendarDateFromKey(key) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+function calendarLabel(date, options) {
+  const label = date.toLocaleDateString('ru-RU', options);
+  return label.charAt(0).toLocaleUpperCase('ru-RU') + label.slice(1);
+}
 function dayDiff(d) {
   const a = new Date(d); a.setHours(0, 0, 0, 0);
   const b = new Date(); b.setHours(0, 0, 0, 0);
@@ -272,7 +282,7 @@ function visibleNotes() {
 const composerAllowed = () => ['notes', 'label', 'reminders', 'folder'].includes(ui.section) && !ui.search;
 const canDrag = () => ui.section !== 'trash';
 const canReorder = () => ['notes', 'label', 'archive', 'folder'].includes(ui.section) && !ui.search;
-const SECTION_TITLES = { notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', archive: 'Архив', trash: 'Корзина', boards: 'Доски' };
+const SECTION_TITLES = { notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', calendar: 'Календарь', archive: 'Архив', trash: 'Корзина', boards: 'Доски' };
 
 // ---------- Рендер ----------
 let renderQueued = false;
@@ -310,12 +320,21 @@ function applyBackground() {
 function renderHeader() {
   const grid = state.settings.view === 'grid';
   const boardView = ['boards', 'board'].includes(ui.section);
+  const calendarView = ui.section === 'calendar';
+  const panelCollapsed = calendarView ? !ui.calendarPanelOpen : !!state.settings.panelCollapsed;
+  const panelToggleTitle = calendarView
+    ? (panelCollapsed ? 'Показать панель заметок' : 'Скрыть панель заметок')
+    : (panelCollapsed ? 'Показать панель' : 'Скрыть панель');
   const vt = $('#viewToggle'); vt.innerHTML = icon(grid ? 'list' : 'grid', 20); vt.title = grid ? 'Список (Ctrl+G)' : 'Сетка (Ctrl+G)';
-  vt.style.display = boardView ? 'none' : '';
-  $('#newNoteBtn').style.display = boardView ? 'none' : '';
+  vt.style.display = boardView || calendarView ? 'none' : '';
+  $('#newNoteBtn').style.display = boardView || calendarView ? 'none' : '';
   $('#searchBox').classList.toggle('has-value', !!ui.search);
-  $('#panelExpand').style.display = state.settings.panelCollapsed ? '' : 'none';
-  $('#panel').classList.toggle('collapsed', !!state.settings.panelCollapsed);
+  $('#panelExpand').style.display = panelCollapsed ? '' : 'none';
+  $('#panelExpand').title = panelToggleTitle;
+  $('#panelExpand').setAttribute('aria-label', panelToggleTitle);
+  $('#panelCollapse').title = calendarView ? 'Скрыть панель заметок' : 'Скрыть панель';
+  $('#panelCollapse').setAttribute('aria-label', $('#panelCollapse').title);
+  $('#panel').classList.toggle('collapsed', panelCollapsed);
   const caret = icon('expandMore', 18);
   let h;
   if (ui.search) h = `<span class="crumb cur">Поиск: «${esc(ui.search.trim())}»</span>`;
@@ -340,9 +359,11 @@ function renderHeader() {
 function renderRail() {
   const cur = ui.section === 'board' ? 'boards' : ['folder', 'label'].includes(ui.section) ? 'notes' : ui.section;
   const remCount = state.notes.filter((n) => n.reminder && !n.trashed && !n.reminderFired).length;
-  const items = [['notes', 'bulb', 'Заметки'], ['boards', 'board', 'Доски'], ['reminders', 'bell', 'Напоминания'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
-  $('#railNav').innerHTML = items.map(([key, ic, t]) =>
-    `<button class="rail-item${key === cur && !ui.search ? ' active' : ''}" data-key="${key}" title="${t}" aria-label="${t}">${icon(ic, 22)}${key === 'reminders' && remCount ? `<span class="rail-badge">${remCount}</span>` : ''}</button>`).join('');
+  const items = [['notes', 'bulb', 'Заметки'], ['boards', 'board', 'Доски'], ['reminders', 'bell', 'Напоминания'], ['calendar', 'calendar', 'Календарь'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
+  $('#railNav').innerHTML = items.map(([key, ic, t]) => {
+    const active = key === cur && !ui.search;
+    return `<button class="rail-item${active ? ' active' : ''}" data-key="${key}" title="${t}" aria-label="${t}"${active ? ' aria-current="page"' : ''}>${icon(ic, 22)}${key === 'reminders' && remCount ? `<span class="rail-badge">${remCount}</span>` : ''}</button>`;
+  }).join('');
 }
 
 // Панель папок и тегов
@@ -550,10 +571,139 @@ function boardGalleryHTML() {
   </div>`;
 }
 
+function getCalendarEvents() {
+  return state.notes
+    .filter((note) => note.reminder && !note.trashed && Number.isFinite(Date.parse(note.reminder)))
+    .sort((a, b) => Date.parse(a.reminder) - Date.parse(b.reminder));
+}
+
+function calendarEventHTML(note) {
+  const date = new Date(note.reminder);
+  const title = String(note.title ?? '').trim() || noteAsText(note).split(/\r?\n/)[0]?.trim() || 'Без названия';
+  const repeatLabel = note.repeat && note.repeat !== 'none'
+    ? (REPEATS.find(([key]) => key === note.repeat)?.[1] || 'Повторяется')
+    : '';
+  const label = `${fmtTime(date)} — ${title}${repeatLabel ? `, ${repeatLabel}` : ''}`;
+  return `<button type="button" class="calendar-event${date.getTime() < Date.now() ? ' is-past' : ''}" data-calendar-note="${esc(note.id)}" aria-label="${esc(label)}">
+    <time class="calendar-event-time" datetime="${esc(date.toISOString())}">${esc(fmtTime(date))}</time>
+    <span class="calendar-event-copy"><strong>${esc(title)}</strong>${repeatLabel ? `<span class="calendar-event-repeat">${icon('repeat', 13)}${esc(repeatLabel)}</span>` : ''}</span>
+    <span class="calendar-event-arrow" aria-hidden="true">${icon('chevron', 16)}</span>
+  </button>`;
+}
+
+function calendarHTML() {
+  const selectedDate = new Date(ui.calendarDate);
+  const today = new Date();
+  const events = getCalendarEvents();
+  const selectedKey = ymd(selectedDate);
+  const monthTitle = calendarLabel(selectedDate, { month: 'long', year: 'numeric' });
+  const monthEventCount = events.filter((event) => {
+    const date = new Date(event.reminder);
+    return date.getFullYear() === selectedDate.getFullYear() && date.getMonth() === selectedDate.getMonth();
+  }).length;
+  const eventCounts = new Map();
+  for (const event of events) {
+    const key = ymd(new Date(event.reminder));
+    eventCounts.set(key, (eventCounts.get(key) || 0) + 1);
+  }
+
+  const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+  const mondayOffset = (monthStart.getDay() + 6) % 7;
+  const gridStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1 - mondayOffset);
+  const weekdayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const calendarDays = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    const key = ymd(date);
+    const eventCount = eventCounts.get(key) || 0;
+    const selected = key === selectedKey;
+    const outsideMonth = date.getMonth() !== selectedDate.getMonth();
+    const isToday = sameCalendarDay(date, today);
+    const dayLabel = date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const eventLabel = eventCount ? `, ${eventCount} ${plural(eventCount, 'напоминание', 'напоминания', 'напоминаний')}` : '';
+    const markers = Array.from({ length: Math.min(eventCount, 3) }, () => '<i></i>').join('');
+    return `<button type="button" class="calendar-day${selected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}${outsideMonth ? ' is-outside' : ''}" data-calendar-day="${key}" aria-pressed="${selected}" aria-label="${esc(dayLabel + eventLabel)}">
+      <span class="calendar-day-number">${date.getDate()}</span>
+      <span class="calendar-day-dots${eventCount ? '' : ' is-empty'}" aria-hidden="true">${markers}</span>
+    </button>`;
+  }).join('');
+
+  const selectedEvents = events.filter((event) => ymd(new Date(event.reminder)) === selectedKey);
+  const isToday = sameCalendarDay(selectedDate, today);
+  const dateLabelOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+  if (selectedDate.getFullYear() !== today.getFullYear()) dateLabelOptions.year = 'numeric';
+  const selectedTitle = calendarLabel(selectedDate, dateLabelOptions);
+  const selectedCount = `${selectedEvents.length} ${plural(selectedEvents.length, 'напоминание', 'напоминания', 'напоминаний')}`;
+  const eventHours = selectedEvents.map((event) => new Date(event.reminder).getHours());
+  const firstHour = selectedEvents.length ? Math.min(8, ...eventHours) : 8;
+  const lastHour = selectedEvents.length ? Math.max(18, ...eventHours) : 18;
+  const timelineRows = selectedEvents.length
+    ? Array.from({ length: lastHour - firstHour + 1 }, (_, index) => {
+      const hour = firstHour + index;
+      const hourEvents = selectedEvents.filter((event) => new Date(event.reminder).getHours() === hour).map(calendarEventHTML).join('');
+      return `<div class="calendar-hour-row${hourEvents ? ' has-events' : ''}${isToday && hour === today.getHours() ? ' is-now' : ''}" role="listitem">
+        <span class="calendar-hour-label">${pad(hour)}:00</span>
+        <div class="calendar-hour-track">${hourEvents}</div>
+      </div>`;
+    }).join('')
+    : '';
+  const todayControl = isToday
+    ? '<span class="calendar-today-label">Сегодня</span>'
+    : '<button type="button" class="calendar-today-button" data-calendar-action="today">Сегодня</button>';
+
+  return `<section class="calendar-page" aria-label="Календарь напоминаний">
+    <header class="calendar-page-head">
+      <div class="calendar-page-copy">
+        <span class="calendar-eyebrow">Планирование</span>
+        <h1>Календарь</h1>
+        <p>Напоминания из заметок — по датам и времени.</p>
+      </div>
+      <button type="button" class="calendar-add-button" data-calendar-action="add">${icon('bellPlus', 18)}<span>Новое напоминание</span></button>
+    </header>
+    <div class="calendar-layout">
+      <section class="calendar-month-card" aria-label="Календарь месяца">
+        <div class="calendar-month-head">
+          <div class="calendar-month-title"><h2>${esc(monthTitle)}</h2><span>${monthEventCount} ${plural(monthEventCount, 'напоминание', 'напоминания', 'напоминаний')}</span></div>
+          <div class="calendar-month-nav" aria-label="Переключение месяца">
+            <button type="button" class="calendar-month-arrow" data-calendar-action="previous-month" aria-label="Предыдущий месяц">${icon('back', 17)}</button>
+            <button type="button" class="calendar-month-arrow" data-calendar-action="next-month" aria-label="Следующий месяц">${icon('chevron', 17)}</button>
+          </div>
+        </div>
+        <div class="calendar-weekdays" aria-hidden="true">${weekdayLabels.map((day) => `<span>${day}</span>`).join('')}</div>
+        <div class="calendar-days" aria-label="Дни месяца">${calendarDays}</div>
+        <footer class="calendar-month-footer">
+          <span class="calendar-legend"><i aria-hidden="true"></i>Есть напоминание</span>
+          ${todayControl}
+        </footer>
+      </section>
+      <section class="calendar-day-card" aria-label="План на выбранный день">
+        <header class="calendar-day-head">
+          <div><span class="calendar-day-kicker">План на день</span><h2>${esc(selectedTitle)}</h2></div>
+          <span class="calendar-event-count">${selectedCount}</span>
+        </header>
+        ${selectedEvents.length
+          ? `<div class="calendar-timeline" role="list" aria-label="Расписание на ${esc(selectedTitle)}">${timelineRows}</div>`
+          : `<div class="calendar-empty" role="status">
+              <span class="calendar-empty-mark" aria-hidden="true">${icon('calendar', 24)}</span>
+              <strong>На этот день пока нет планов</strong>
+              <p>Добавьте напоминание — оно появится здесь и в заметках.</p>
+              <button type="button" class="calendar-empty-action" data-calendar-action="add">${icon('add', 16)}Добавить напоминание</button>
+            </div>`}
+      </section>
+    </div>
+  </section>`;
+}
+
 function renderNotes() {
   clearTimeout(notesTimer);
   const c = $('#content');
   cardRO.disconnect();
+  if (ui.section === 'calendar') {
+    c.innerHTML = calendarHTML();
+    ui.selected.clear();
+    renderSelbar();
+    return;
+  }
   if (ui.section === 'board') {
     c.innerHTML = '';
     ui.selected.clear();
@@ -2054,6 +2204,25 @@ function boardMenu(anchor, id) {
 }
 
 // ---------- Навигация ----------
+function createCalendarReminder() {
+  if (modal) closeModal();
+  const selectedDate = new Date(ui.calendarDate);
+  const reminderDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 9, 0, 0, 0);
+  const now = new Date();
+  if (sameCalendarDay(reminderDate, now) && reminderDate <= now) {
+    const nextHour = new Date(now);
+    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+    if (sameCalendarDay(nextHour, reminderDate)) reminderDate.setTime(nextHour.getTime());
+    else reminderDate.setHours(23, 59, 59, 999);
+  }
+  const note = newNote({ reminder: reminderDate.toISOString() });
+  note.order = nextOrder();
+  state.notes.push(note);
+  save();
+  render();
+  requestAnimationFrame(() => openNoteModal(note.id));
+}
+
 function setSection(key) {
   closeComposer();
   closePopover();
@@ -2092,6 +2261,11 @@ function toggleView() {
   save(); updateGridWidth(); renderHeader(); renderNotes();
 }
 function togglePanel(collapsed) {
+  if (ui.section === 'calendar') {
+    ui.calendarPanelOpen = !collapsed;
+    renderHeader();
+    return;
+  }
   state.settings.panelCollapsed = collapsed;
   save(); renderHeader();
 }
@@ -2241,6 +2415,30 @@ function bindEvents() {
 
   const content = $('#content');
   content.addEventListener('click', (e) => {
+    const calendarAction = e.target.closest('[data-calendar-action]');
+    if (calendarAction) {
+      const action = calendarAction.dataset.calendarAction;
+      if (action === 'previous-month' || action === 'next-month') {
+        const selected = new Date(ui.calendarDate);
+        const month = new Date(selected.getFullYear(), selected.getMonth() + (action === 'previous-month' ? -1 : 1), 1);
+        const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+        month.setDate(Math.min(selected.getDate(), lastDay));
+        ui.calendarDate = month;
+        renderNotes();
+      } else if (action === 'today') {
+        ui.calendarDate = new Date();
+        renderNotes();
+      } else if (action === 'add') createCalendarReminder();
+      return;
+    }
+    const calendarDay = e.target.closest('[data-calendar-day]');
+    if (calendarDay) {
+      ui.calendarDate = calendarDateFromKey(calendarDay.dataset.calendarDay);
+      renderNotes();
+      return;
+    }
+    const calendarNote = e.target.closest('[data-calendar-note]');
+    if (calendarNote) { openNoteModal(calendarNote.dataset.calendarNote); return; }
     if (e.target.closest('[data-global="create-board"]')) { createBoard(); return; }
     const boardOpen = e.target.closest('[data-board-open]');
     if (boardOpen) { setSection(`board:${boardOpen.dataset.boardOpen}`); return; }
