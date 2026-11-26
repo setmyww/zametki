@@ -584,7 +584,7 @@ function calendarEventHTML(note) {
     ? (REPEATS.find(([key]) => key === note.repeat)?.[1] || 'Повторяется')
     : '';
   const label = `${fmtTime(date)} — ${title}${repeatLabel ? `, ${repeatLabel}` : ''}`;
-  return `<button type="button" class="calendar-event${date.getTime() < Date.now() ? ' is-past' : ''}" data-calendar-note="${esc(note.id)}" aria-label="${esc(label)}">
+  return `<button type="button" class="calendar-event${date.getTime() < Date.now() ? ' is-past' : ''}" ${colorAttr(note.color)} data-calendar-note="${esc(note.id)}" aria-label="${esc(label)}">
     <time class="calendar-event-time" datetime="${esc(date.toISOString())}">${esc(fmtTime(date))}</time>
     <span class="calendar-event-copy"><strong>${esc(title)}</strong>${repeatLabel ? `<span class="calendar-event-repeat">${icon('repeat', 13)}${esc(repeatLabel)}</span>` : ''}</span>
     <span class="calendar-event-arrow" aria-hidden="true">${icon('chevron', 16)}</span>
