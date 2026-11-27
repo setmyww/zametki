@@ -59,44 +59,12 @@
         <div id="composerWrap"></div>
         <div id="content"></div>
       </main>
-      <section class="board-workspace" id="boardWorkspace" aria-label="Рабочая область доски" hidden>
-        <div class="board-toolbar">
-          <label class="board-title-wrap">
-            <span class="sr-only">Название доски</span>
-            <input id="boardTitle" type="text" maxlength="80" autocomplete="off" spellcheck="false">
-          </label>
-          <div class="board-tools" role="toolbar" aria-label="Инструменты доски">
-            <button type="button" class="board-tool" data-board-action="add-sticky">+ Стикер</button>
-            <button type="button" class="board-tool" data-board-action="add-text">Текст</button>
-            <button type="button" class="board-tool" data-board-action="add-shape">Фигура</button>
-            <button type="button" class="board-tool" id="boardConnect" data-board-action="connect" aria-pressed="false">Связь</button>
-          </div>
-          <button type="button" class="board-delete" data-board-action="delete">Удалить доску</button>
-        </div>
-        <div class="board-canvas" id="boardCanvas" role="region" aria-label="Доска" tabindex="0">
-          <div class="board-world" id="boardWorld"></div>
-          <div class="board-empty-canvas">
-            <span class="board-empty-mark" aria-hidden="true"></span>
-            <strong>Начните с идеи</strong>
-            <span>Добавьте стикер, текст или фигуру. Перетаскивайте блоки и соединяйте их.</span>
-          </div>
-          <div class="board-hint" id="boardHint" role="status" aria-live="polite" hidden></div>
-          <div class="board-zoom-bar" aria-label="Масштаб доски">
-            <button type="button" data-board-action="zoom-out" aria-label="Уменьшить масштаб" title="Уменьшить масштаб">−</button>
-            <output id="boardZoom" aria-live="polite">100%</output>
-            <button type="button" data-board-action="zoom-in" aria-label="Увеличить масштаб" title="Увеличить масштаб">+</button>
-            <span class="board-zoom-divider" aria-hidden="true"></span>
-            <button type="button" data-board-action="fit" aria-label="Показать все элементы" title="Показать все элементы">Вписать</button>
-          </div>
-        </div>
-      </section>
     </section>
   </div>
   <div id="modalRoot"></div>
   <div id="popoverRoot"></div>
   <div id="snackbar" class="snackbar"></div>
   <input type="file" id="fileInput" accept="image/*" multiple hidden>
-  <script src="board.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

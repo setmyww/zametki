@@ -44,7 +44,6 @@ if (!window.api) {
 
 // ---------- Иконки (Material Icons, Apache 2.0) ----------
 const ICONS = {
-  board: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
   menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
@@ -111,11 +110,11 @@ const TRASH_DAYS = 7;
 
 // ---------- Состояние ----------
 const defaultState = () => ({
-  version: 3, notes: [], labels: [], folders: [], files: [], boards: [],
+  version: 2, notes: [], labels: [], folders: [], files: [],
   settings: { view: 'grid', theme: 'dark', panelCollapsed: false, panelTab: 'folders', collapsedFolders: [], background: null, blur: 28, designV2: true },
 });
 let state = defaultState();
-const ui = { section: 'notes', labelId: null, folderId: null, boardId: null, restorePanelAfterBoard: false, search: '', selected: new Set() };
+const ui = { section: 'notes', labelId: null, folderId: null, search: '', selected: new Set() };
 let sysInfo = { acrylicSupported: false };
 let cardDragId = null;
 
@@ -143,54 +142,6 @@ function newNote(partial = {}) {
 const isEmpty = (n) => !n.title.trim() && !n.content.trim() && !n.items.some((i) => i.text.trim()) && !n.images.length && !(n.files || []).length;
 const nextOrder = () => state.notes.reduce((m, n) => Math.max(m, n.order || 0), 0) + 1;
 const getNote = (id) => state.notes.find((n) => n.id === id);
-const getBoard = (id) => state.boards.find((board) => board.id === id);
-function normalizeBoard(value = {}) {
-  const board = value && typeof value === 'object' ? value : {};
-  const now = Date.now();
-  const safeId = (id) => typeof id === 'string' && /^[\w-]{1,80}$/.test(id) ? id : uid();
-  const seenIds = new Set();
-  const colors = new Set(['sun', 'pink', 'blue', 'mint']);
-  const elements = (Array.isArray(board.elements) ? board.elements : []).slice(0, 500).map((element = {}) => {
-    let id = safeId(element.id);
-    if (seenIds.has(id)) id = uid();
-    seenIds.add(id);
-    const number = (input, fallback = 0) => Number.isFinite(Number(input)) ? Number(input) : fallback;
-    return {
-      id,
-      type: ['sticky', 'text', 'shape'].includes(element.type) ? element.type : 'sticky',
-      x: Math.max(-10000, Math.min(10000, number(element.x))),
-      y: Math.max(-10000, Math.min(10000, number(element.y))),
-      text: String(element.text ?? '').slice(0, 4000),
-      color: colors.has(element.color) ? element.color : 'sun',
-    };
-  });
-  const ids = new Set(elements.map((element) => element.id));
-  const links = new Set();
-  const connections = (Array.isArray(board.connections) ? board.connections : []).flatMap((connection) => {
-    const from = connection?.from;
-    const to = connection?.to;
-    if (!ids.has(from) || !ids.has(to) || from === to) return [];
-    const key = [from, to].sort().join(':');
-    if (links.has(key)) return [];
-    links.add(key);
-    return [{ from, to }];
-  }).slice(0, 1000);
-  const camera = board.camera && typeof board.camera === 'object' ? board.camera : {};
-  const number = (input, fallback = 0) => Number.isFinite(Number(input)) ? Number(input) : fallback;
-  return {
-    id: safeId(board.id),
-    title: String(board.title || 'Новая доска').trim().slice(0, 80) || 'Новая доска',
-    elements,
-    connections,
-    camera: {
-      x: Math.max(-10000, Math.min(10000, number(camera.x))),
-      y: Math.max(-10000, Math.min(10000, number(camera.y))),
-      zoom: Math.max(0.35, Math.min(2.4, number(camera.zoom, 1))),
-    },
-    createdAt: number(board.createdAt, now),
-    updatedAt: number(board.updatedAt, now),
-  };
-}
 const touch = (n) => { n.updatedAt = Date.now(); };
 const sortedLabels = () => [...state.labels].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 const labelName = (id) => state.labels.find((l) => l.id === id)?.name;
@@ -272,7 +223,7 @@ function visibleNotes() {
 const composerAllowed = () => ['notes', 'label', 'reminders', 'folder'].includes(ui.section) && !ui.search;
 const canDrag = () => ui.section !== 'trash';
 const canReorder = () => ['notes', 'label', 'archive', 'folder'].includes(ui.section) && !ui.search;
-const SECTION_TITLES = { notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', archive: 'Архив', trash: 'Корзина', boards: 'Доски' };
+const SECTION_TITLES = { notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', archive: 'Архив', trash: 'Корзина' };
 
 // ---------- Рендер ----------
 let renderQueued = false;
@@ -281,7 +232,7 @@ function render() {
   renderQueued = true;
   requestAnimationFrame(() => { renderQueued = false; renderAll(); });
 }
-function renderAll() { applyTheme(); renderHeader(); renderRail(); renderPanel(); renderComposer(); renderNotes(); renderBoard(); }
+function renderAll() { applyTheme(); renderHeader(); renderRail(); renderPanel(); renderComposer(); renderNotes(); }
 const renderSidebar = () => { renderRail(); renderPanel(); };
 
 let notesTimer = null;
@@ -309,20 +260,13 @@ function applyBackground() {
 // Заголовок с «хлебными крошками» над заметками
 function renderHeader() {
   const grid = state.settings.view === 'grid';
-  const boardView = ['boards', 'board'].includes(ui.section);
   const vt = $('#viewToggle'); vt.innerHTML = icon(grid ? 'list' : 'grid', 20); vt.title = grid ? 'Список (Ctrl+G)' : 'Сетка (Ctrl+G)';
-  vt.style.display = boardView ? 'none' : '';
-  $('#newNoteBtn').style.display = boardView ? 'none' : '';
   $('#searchBox').classList.toggle('has-value', !!ui.search);
   $('#panelExpand').style.display = state.settings.panelCollapsed ? '' : 'none';
   $('#panel').classList.toggle('collapsed', !!state.settings.panelCollapsed);
   const caret = icon('expandMore', 18);
   let h;
   if (ui.search) h = `<span class="crumb cur">Поиск: «${esc(ui.search.trim())}»</span>`;
-  else if (ui.section === 'board') {
-    const board = getBoard(ui.boardId);
-    h = `<button class="crumb" data-key="boards">${icon('board', 18)}Доски</button><span class="sep">/</span><span class="crumb cur board-crumb-title">${esc(board?.title || 'Доска')}</span>`;
-  } else if (ui.section === 'boards') h = `<span class="crumb cur">${SECTION_TITLES.boards}</span>`;
   else if (ui.section === 'folder') {
     const path = folderPath(ui.folderId);
     h = '<button class="crumb" data-key="notes">Все заметки</button>' + path.map((f, i) => '<span class="sep">/</span>' + (i < path.length - 1
@@ -338,49 +282,21 @@ function renderHeader() {
 
 // Узкая панель с иконками разделов
 function renderRail() {
-  const cur = ui.section === 'board' ? 'boards' : ['folder', 'label'].includes(ui.section) ? 'notes' : ui.section;
+  const cur = ['folder', 'label'].includes(ui.section) ? 'notes' : ui.section;
   const remCount = state.notes.filter((n) => n.reminder && !n.trashed && !n.reminderFired).length;
-  const items = [['notes', 'bulb', 'Заметки'], ['boards', 'board', 'Доски'], ['reminders', 'bell', 'Напоминания'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
+  const items = [['notes', 'bulb', 'Заметки'], ['reminders', 'bell', 'Напоминания'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
   $('#railNav').innerHTML = items.map(([key, ic, t]) =>
-    `<button class="rail-item${key === cur && !ui.search ? ' active' : ''}" data-key="${key}" title="${t}" aria-label="${t}">${icon(ic, 22)}${key === 'reminders' && remCount ? `<span class="rail-badge">${remCount}</span>` : ''}</button>`).join('');
+    `<button class="rail-item${key === cur && !ui.search ? ' active' : ''}" data-key="${key}" title="${t}">${icon(ic, 22)}${key === 'reminders' && remCount ? `<span class="rail-badge">${remCount}</span>` : ''}</button>`).join('');
 }
 
 // Панель папок и тегов
 function renderPanel() {
-  const boardView = ['boards', 'board'].includes(ui.section);
-  const title = $('.panel-title');
-  const add = $('#panelAdd');
-  const tree = $('#tree');
-  if (boardView) {
-    title.textContent = 'Мои доски';
-    $('#searchBox').style.display = 'none';
-    $('#seg').style.display = 'none';
-    add.innerHTML = icon('add', 18);
-    add.title = 'Новая доска';
-    add.setAttribute('aria-label', 'Новая доска');
-    const boards = [...state.boards].sort((a, b) => b.updatedAt - a.updatedAt);
-    tree.innerHTML = boards.length
-      ? `<div class="tree-label">Доски</div>${boards.map((board) => {
-        const active = ui.section === 'board' && ui.boardId === board.id;
-        return `<div class="board-nav-row">
-          <button type="button" class="board-nav-button${active ? ' active' : ''}" data-board-open="${esc(board.id)}"${active ? ' aria-current="page"' : ''}>
-            ${icon('board', 18)}<span class="board-nav-title">${esc(board.title)}</span><span class="board-nav-count">${board.elements.length}</span>
-          </button>
-          <button type="button" class="icon-btn tiny board-nav-more" data-board-menu="${esc(board.id)}" title="Действия с доской" aria-label="Действия с доской ${esc(board.title)}">${icon('more', 16)}</button>
-        </div>`;
-      }).join('')}`
-      : '<div class="board-list-empty">Создайте доску, чтобы собрать идеи на одном холсте.</div>';
-    return;
-  }
-
-  title.textContent = 'Мои заметки';
-  $('#searchBox').style.display = '';
-  $('#seg').style.display = '';
   const tab = state.settings.panelTab === 'tags' ? 'tags' : 'folders';
   $('#seg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  const add = $('#panelAdd');
   add.innerHTML = icon(tab === 'tags' ? 'add' : 'folderNew', 18);
   add.title = tab === 'tags' ? 'Новый тег' : 'Новая папка';
-  add.removeAttribute('aria-label');
+  const tree = $('#tree');
   if (tab === 'folders') {
     const allActive = ui.section === 'notes' && !ui.search;
     let h = `<div class="titem${allActive ? ' active' : ''}" data-key="notes"><span class="tchev hidden"></span>${icon('bulb', 18)}<span class="tname">Все заметки</span><span class="tcount">${activeNotes().length}</span></div>`;
@@ -533,39 +449,10 @@ function fcardHTML(f) {
   </div>`;
 }
 
-function boardGalleryHTML() {
-  const boards = [...state.boards].sort((a, b) => b.updatedAt - a.updatedAt);
-  const cards = boards.map((board) => {
-    const preview = board.elements.slice(0, 3).map((element) =>
-      `<span class="board-preview-node" data-color="${esc(element.color || 'sun')}">${esc(element.text || 'Новая идея').slice(0, 42)}</span>`).join('');
-    const count = board.elements.length;
-    return `<button type="button" class="board-gallery-card" data-board-open="${esc(board.id)}" aria-label="Открыть доску ${esc(board.title)}">
-      <span class="board-gallery-preview" aria-hidden="true">${preview || '<span class="board-preview-empty">Пустая доска</span>'}</span>
-      <span class="board-gallery-card-info"><span class="board-gallery-card-title">${esc(board.title)}</span><span class="board-gallery-card-meta">${count} ${plural(count, 'элемент', 'элемента', 'элементов')} · ${esc(fmtDay(new Date(board.updatedAt)))}</span></span>
-    </button>`;
-  }).join('');
-  return `<div class="board-gallery">
-    <div class="board-gallery-head"><div><h2>Доски</h2><p>Собирайте мысли, заметки и связи на одном холсте.</p></div><button type="button" class="text-btn primary" data-global="create-board">+ Новая доска</button></div>
-    ${cards ? `<div class="board-gallery-grid">${cards}</div>` : `<div class="board-gallery-empty"><span class="board-gallery-empty-mark" aria-hidden="true"></span><strong>Создайте первую доску</strong><p>Добавляйте стикеры, свободный текст и фигуры, затем соединяйте идеи линиями.</p><button type="button" class="text-btn primary" data-global="create-board">Создать доску</button></div>`}
-  </div>`;
-}
-
 function renderNotes() {
   clearTimeout(notesTimer);
   const c = $('#content');
   cardRO.disconnect();
-  if (ui.section === 'board') {
-    c.innerHTML = '';
-    ui.selected.clear();
-    renderSelbar();
-    return;
-  }
-  if (ui.section === 'boards') {
-    c.innerHTML = boardGalleryHTML();
-    ui.selected.clear();
-    renderSelbar();
-    return;
-  }
   const notes = visibleNotes();
   const view = state.settings.view;
   let html = '';
@@ -621,25 +508,6 @@ function renderNotes() {
   const ids = new Set(notes.map((n) => n.id));
   for (const id of [...ui.selected]) if (!ids.has(id)) ui.selected.delete(id);
   renderSelbar();
-}
-
-function renderBoard() {
-  const active = ui.section === 'board';
-  const main = $('#main');
-  const workspace = $('#boardWorkspace');
-  main.hidden = active;
-  workspace.hidden = !active;
-  document.body.classList.toggle('board-open', active);
-  if (!active) {
-    window.BoardCanvas.setConnectMode(false);
-    return;
-  }
-  const board = getBoard(ui.boardId);
-  if (!board) { setSection('boards'); return; }
-  const title = $('#boardTitle');
-  if (document.activeElement !== title) title.value = board.title;
-  $('#boardCanvas').setAttribute('aria-label', `Доска «${board.title}»`);
-  window.BoardCanvas.render(board);
 }
 
 // ---------- Поле создания заметки ----------
@@ -1922,8 +1790,8 @@ function cleanupTrash() {
 
 // ---------- Импорт / экспорт ----------
 function exportNotes() {
-  window.api.exportData({ app: 'zametki', version: 2, exportedAt: new Date().toISOString(), notes: state.notes, labels: state.labels, folders: state.folders, files: state.files, boards: state.boards })
-    .then((ok) => { if (ok) showSnack('Заметки и доски экспортированы'); });
+  window.api.exportData({ app: 'zametki', version: 1, exportedAt: new Date().toISOString(), notes: state.notes, labels: state.labels, folders: state.folders, files: state.files })
+    .then((ok) => { if (ok) showSnack('Заметки экспортированы'); });
 }
 async function importNotes() {
   const files = await window.api.importData();
@@ -1934,18 +1802,10 @@ async function importNotes() {
     return l.id;
   };
   const imported = [];
-  let importedBoards = 0;
   let skipped = 0;
   for (const f of files) {
     const d = f.data;
     if (f.error || !d || typeof d !== 'object') { skipped++; continue; }
-    if (Array.isArray(d.boards)) {
-      for (const board of d.boards) {
-        if (!board || typeof board !== 'object') continue;
-        state.boards.push(normalizeBoard({ ...board, id: uid() }));
-        importedBoards++;
-      }
-    }
     if (Array.isArray(d.notes)) {
       const map = {};
       (d.labels || []).forEach((l) => { if (l && l.name) map[l.id] = labelIdByName(l.name); });
@@ -1983,13 +1843,13 @@ async function importNotes() {
       n.labels = (d.labels || []).map((l) => labelIdByName(l.name));
       n.images = (d.attachments || []).map((a) => f.attachments?.[a.filePath]).filter(Boolean);
       imported.push(n);
-    } else if (!Array.isArray(d.boards)) skipped++;
+    } else skipped++;
   }
   imported.sort((a, b) => a.updatedAt - b.updatedAt);
   let base = nextOrder();
   imported.forEach((n) => { n.order = base++; state.notes.push(n); });
   save(); render();
-  showSnack(`Импортировано заметок: ${imported.length}${importedBoards ? `, досок: ${importedBoards}` : ''}${skipped ? `, пропущено файлов: ${skipped}` : ''}`);
+  showSnack(`Импортировано заметок: ${imported.length}${skipped ? `, пропущено файлов: ${skipped}` : ''}`);
 }
 
 async function openAppMenu(btn) {
@@ -2000,80 +1860,18 @@ async function openAppMenu(btn) {
     items.push(['Сворачивать в трей при закрытии', () => window.api.setCloseToTray(!s.closeToTray), { checked: s.closeToTray }]);
     items.push(['Запускать вместе с Windows', () => window.api.setAutostart(!s.autostart), { checked: s.autostart }]);
   }
-  items.push(['Экспорт заметок и досок…', exportNotes], ['Импорт заметок и досок…', importNotes], ['Быстрые клавиши', showShortcuts], ['О приложении', showAbout]);
+  items.push(['Экспорт заметок…', exportNotes], ['Импорт заметок…', importNotes], ['Быстрые клавиши', showShortcuts], ['О приложении', showAbout]);
   menuPopover(btn, items);
-}
-
-// ---------- Доски ----------
-function createBoard() {
-  const now = Date.now();
-  const board = normalizeBoard({ id: uid(), title: 'Новая доска', elements: [], connections: [], camera: { x: 0, y: 0, zoom: 1 }, createdAt: now, updatedAt: now });
-  state.boards.unshift(board);
-  save();
-  setSection(`board:${board.id}`);
-  requestAnimationFrame(() => $('#boardTitle')?.focus());
-}
-
-function addBoardElement(type) {
-  const board = getBoard(ui.boardId);
-  if (!board || !['sticky', 'text', 'shape'].includes(type)) return;
-  const positions = [[0, 0], [-270, -170], [270, -170], [-270, 150], [270, 150], [0, 310]];
-  const position = positions[board.elements.length % positions.length];
-  const element = { id: uid(), type, x: position[0], y: position[1], text: '', color: type === 'shape' ? 'blue' : 'sun' };
-  board.elements.push(element);
-  board.updatedAt = Date.now();
-  save();
-  renderBoard();
-  renderPanel();
-  requestAnimationFrame(() => {
-    [...$('#boardWorld').querySelectorAll('.board-node')]
-      .find((node) => node.dataset.nodeId === element.id)?.querySelector('[data-board-text]')?.focus();
-  });
-}
-
-async function deleteBoard(id) {
-  const board = getBoard(id);
-  if (!board || !(await confirmDialog(`Удалить доску «${board.title}» и все её элементы?`, 'Удалить доску'))) return;
-  state.boards = state.boards.filter((item) => item.id !== id);
-  save();
-  setSection('boards');
-  showSnack('Доска удалена');
-}
-
-function boardMenu(anchor, id) {
-  const board = getBoard(id);
-  if (!board) return;
-  menuPopover(anchor, [
-    ['Открыть', () => setSection(`board:${id}`)],
-    ['Переименовать', () => {
-      setSection(`board:${id}`);
-      requestAnimationFrame(() => { const input = $('#boardTitle'); input?.focus(); input?.select(); });
-    }],
-    ['Удалить', () => deleteBoard(id)],
-  ]);
 }
 
 // ---------- Навигация ----------
 function setSection(key) {
   closeComposer();
   closePopover();
-  const previousSection = ui.section;
-  const openingBoard = key.startsWith('board:');
-  if (previousSection === 'board' && !openingBoard && ui.restorePanelAfterBoard) {
-    state.settings.panelCollapsed = false;
-    ui.restorePanelAfterBoard = false;
-  }
-  if (openingBoard && window.innerWidth <= 720 && !state.settings.panelCollapsed) {
-    state.settings.panelCollapsed = true;
-    ui.restorePanelAfterBoard = true;
-  }
-  ui.labelId = null; ui.folderId = null; ui.boardId = null;
+  ui.labelId = null; ui.folderId = null;
   if (key.startsWith('label:')) { ui.section = 'label'; ui.labelId = key.slice(6); }
   else if (key.startsWith('folder:')) { ui.section = 'folder'; ui.folderId = key.slice(7); expandTo(ui.folderId); }
-  else if (key.startsWith('board:')) {
-    const board = getBoard(key.slice(6));
-    if (board) { ui.section = 'board'; ui.boardId = board.id; } else ui.section = 'boards';
-  } else ui.section = key;
+  else ui.section = key;
   ui.search = '';
   $('#search').value = '';
   ui.selected.clear();
@@ -2116,56 +1914,6 @@ function bindEvents() {
   $('#panelCollapse').addEventListener('click', () => togglePanel(true));
   $('#panelExpand').addEventListener('click', () => togglePanel(false));
 
-  const boardTitle = $('#boardTitle');
-  boardTitle.addEventListener('input', () => {
-    const board = getBoard(ui.boardId);
-    if (!board || ui.section !== 'board') return;
-    board.title = boardTitle.value.trim().slice(0, 80) || 'Новая доска';
-    board.updatedAt = Date.now();
-    const crumb = $('#crumbs .board-crumb-title');
-    if (crumb) crumb.textContent = board.title;
-    save();
-  });
-  boardTitle.addEventListener('blur', () => {
-    const board = getBoard(ui.boardId);
-    if (!board || ui.section !== 'board') return;
-    board.title = board.title.trim() || 'Новая доска';
-    boardTitle.value = board.title;
-    save();
-    renderHeader();
-    renderPanel();
-  });
-  const updateBoardConnectUI = (active) => {
-    const button = $('#boardConnect');
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-    const hint = $('#boardHint');
-    hint.hidden = !active;
-    hint.textContent = active ? 'Выберите два элемента, чтобы соединить их. Нажмите Esc, чтобы отменить.' : '';
-  };
-  window.BoardCanvas.mount({
-    canvas: $('#boardCanvas'),
-    world: $('#boardWorld'),
-    onChange: () => {
-      const board = getBoard(ui.boardId);
-      if (board) { board.updatedAt = Date.now(); save(); renderPanel(); }
-    },
-    onModeChange: updateBoardConnectUI,
-    onZoomChange: (zoom) => { $('#boardZoom').textContent = `${Math.round(zoom * 100)}%`; },
-  });
-  $('#boardWorkspace').addEventListener('click', (e) => {
-    const action = e.target.closest('[data-board-action]')?.dataset.boardAction;
-    if (!action) return;
-    if (action === 'add-sticky') addBoardElement('sticky');
-    else if (action === 'add-text') addBoardElement('text');
-    else if (action === 'add-shape') addBoardElement('shape');
-    else if (action === 'connect') window.BoardCanvas.setConnectMode(!window.BoardCanvas.isConnectMode());
-    else if (action === 'zoom-in') window.BoardCanvas.zoomBy(1.12);
-    else if (action === 'zoom-out') window.BoardCanvas.zoomBy(1 / 1.12);
-    else if (action === 'fit') window.BoardCanvas.fitToBoard();
-    else if (action === 'delete') deleteBoard(ui.boardId);
-  });
-
   const search = $('#search');
   search.addEventListener('input', () => { ui.search = search.value; ui.selected.clear(); render(); });
   search.addEventListener('focus', () => $('#searchBox').classList.add('focused'));
@@ -2180,17 +1928,12 @@ function bindEvents() {
     save(); renderPanel();
   });
   $('#panelAdd').addEventListener('click', () => {
-    if (['boards', 'board'].includes(ui.section)) { createBoard(); return; }
     if (state.settings.panelTab === 'tags') $('#newTag')?.focus();
     else newFolderFlow(ui.section === 'folder' ? ui.folderId : null);
   });
   const tree = $('#tree');
   tree.addEventListener('click', (e) => {
     if (e.target.closest('input')) return;
-    const boardOpen = e.target.closest('[data-board-open]');
-    if (boardOpen) { setSection(`board:${boardOpen.dataset.boardOpen}`); return; }
-    const boardMenuButton = e.target.closest('[data-board-menu]');
-    if (boardMenuButton) { boardMenu(boardMenuButton, boardMenuButton.dataset.boardMenu); return; }
     if (e.target.closest('[data-global="new-folder"]')) { newFolderFlow(null); return; }
     const item = e.target.closest('.titem');
     if (!item) return;
@@ -2241,9 +1984,6 @@ function bindEvents() {
 
   const content = $('#content');
   content.addEventListener('click', (e) => {
-    if (e.target.closest('[data-global="create-board"]')) { createBoard(); return; }
-    const boardOpen = e.target.closest('[data-board-open]');
-    if (boardOpen) { setSection(`board:${boardOpen.dataset.boardOpen}`); return; }
     if (e.target.closest('[data-global="empty-trash"]')) { emptyTrash(); return; }
     if (e.target.closest('[data-global="new-folder"]')) { newFolderFlow(ui.section === 'folder' ? ui.folderId : null); return; }
     const up = e.target.closest('[data-global="upload"]');
@@ -2356,7 +2096,6 @@ function bindEvents() {
   document.addEventListener('keydown', (e) => {
     const typing = !!e.target.closest?.('input, textarea, select, [contenteditable]');
     if (e.key === 'Escape') {
-      if (window.BoardCanvas.isConnectMode()) { window.BoardCanvas.setConnectMode(false); return; }
       if (popover) { closePopover(); return; }
       if (dialogs.length) { dialogs[dialogs.length - 1].close(); return; }
       if (modal) { closeModal(); return; }
@@ -2365,9 +2104,9 @@ function bindEvents() {
       if (ui.search) { $('#search').value = ''; ui.search = ''; render(); $('#search').blur(); }
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyG' && !['boards', 'board'].includes(ui.section)) { e.preventDefault(); toggleView(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyG') { e.preventDefault(); toggleView(); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !typing && snackUndo) { e.preventDefault(); const u = snackUndo; hideSnack(); u(); return; }
-    if (['boards', 'board'].includes(ui.section) || typing || e.ctrlKey || e.altKey || e.metaKey || modal || dialogs.length) return;
+    if (typing || e.ctrlKey || e.altKey || e.metaKey || modal || dialogs.length) return;
     if (e.code === 'KeyC') { e.preventDefault(); startNew('text'); }
     else if (e.code === 'KeyL') { e.preventDefault(); startNew('list'); }
     else if (e.code === 'KeyN') { e.preventDefault(); newFolderFlow(ui.section === 'folder' ? ui.folderId : null); }
@@ -2406,18 +2145,6 @@ function seed() {
     title: 'Идея для проекта', content: 'Сделать приложение для заметок с папками и стеклянным интерфейсом.', order: 1,
     labels: [ideas.id], folderId: projects.id, color: 'dusk',
   }));
-  const firstIdea = uid(), secondIdea = uid(), firstStep = uid();
-  const now = Date.now();
-  state.boards.push(normalizeBoard({
-    id: uid(), title: 'Идеи проекта', createdAt: now, updatedAt: now,
-    camera: { x: 0, y: 0, zoom: 1 },
-    elements: [
-      { id: firstIdea, type: 'sticky', x: -270, y: -70, text: 'Собрать важные мысли в одном месте.', color: 'sun' },
-      { id: secondIdea, type: 'sticky', x: 0, y: -150, text: 'Разложить большую идею на понятные этапы.', color: 'pink' },
-      { id: firstStep, type: 'shape', x: 270, y: -70, text: 'Первый шаг', color: 'mint' },
-    ],
-    connections: [{ from: firstIdea, to: secondIdea }, { from: secondIdea, to: firstStep }],
-  }));
 }
 
 async function init() {
@@ -2431,12 +2158,9 @@ async function init() {
     state.labels = Array.isArray(state.labels) ? state.labels : [];
     state.folders = Array.isArray(state.folders) ? state.folders : [];
     state.files = Array.isArray(state.files) ? state.files : [];
-    state.boards = Array.isArray(state.boards) ? state.boards.map(normalizeBoard) : [];
     state.folders.forEach((f) => { if (!Array.isArray(f.labels)) f.labels = []; });
     state.notes = state.notes.map((n) => ({ ...newNote(), ...n }));
-    if (!data.settings?.designV2) { state.settings.theme = 'dark'; state.settings.designV2 = true; }
-    state.version = 3;
-    if (data.version !== 3 || !Array.isArray(data.boards) || !data.settings?.designV2) save();
+    if (!data.settings?.designV2) { state.settings.theme = 'dark'; state.settings.designV2 = true; state.version = 2; save(); }
   } else {
     seed();
     save();
