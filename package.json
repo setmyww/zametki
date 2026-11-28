@@ -1,7 +1,7 @@
 {
   "name": "zametki",
   "productName": "Заметки",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Заметки и списки для Windows",
   "main": "main.js",
   "author": "Zametki",
@@ -16,7 +16,7 @@
     "productName": "Заметки",
     "executableName": "Zametki",
     "artifactName": "Zametki-Setup-${version}.${ext}",
-    "files": ["main.js", "preload.js", "index.html", "app.js", "styles.css", "icon.png"],
+    "files": ["main.js", "preload.js", "index.html", "app.js", "board.js", "styles.css", "icon.png"],
     "directories": { "output": "dist" },
     "win": { "target": "nsis", "icon": "build/icon.ico" },
     "nsis": {

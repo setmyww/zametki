@@ -87,6 +87,7 @@ const ICONS = {
   attach: 'M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z',
   upload: 'M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z',
   folderOpen: 'M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z',
+  board: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h4v8H7zm6 0h4v5h-4z',
   noColor: 'M18 14c0-4-6-10.8-6-10.8s-1.33 1.51-2.73 3.52l8.59 8.59c.09-.42.14-.86.14-1.31zm-.88 3.12L12.5 12.5 5.27 5.27 4 6.55l3.32 3.32C6.55 11.32 6 12.79 6 14c0 3.31 2.69 6 6 6 1.52 0 2.9-.57 3.96-1.5l2.63 2.63 1.27-1.27-2.74-2.74z',
 };
 const icon = (name, size = 24) =>
@@ -110,11 +111,11 @@ const TRASH_DAYS = 7;
 
 // ---------- Состояние ----------
 const defaultState = () => ({
-  version: 2, notes: [], labels: [], folders: [], files: [],
+  version: 2, notes: [], labels: [], folders: [], files: [], boards: [],
   settings: { view: 'grid', theme: 'dark', panelCollapsed: false, panelTab: 'folders', collapsedFolders: [], background: null, blur: 28, designV2: true },
 });
 let state = defaultState();
-const ui = { section: 'notes', labelId: null, folderId: null, search: '', selected: new Set() };
+const ui = { section: 'notes', labelId: null, folderId: null, boardId: null, search: '', selected: new Set() };
 let sysInfo = { acrylicSupported: false };
 let cardDragId = null;
 
@@ -223,7 +224,7 @@ function visibleNotes() {
 const composerAllowed = () => ['notes', 'label', 'reminders', 'folder'].includes(ui.section) && !ui.search;
 const canDrag = () => ui.section !== 'trash';
 const canReorder = () => ['notes', 'label', 'archive', 'folder'].includes(ui.section) && !ui.search;
-const SECTION_TITLES = { notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', archive: 'Архив', trash: 'Корзина' };
+const SECTION_TITLES = { boards: 'Доски', notes: 'Все заметки', files: 'Файлы', reminders: 'Напоминания', archive: 'Архив', trash: 'Корзина' };
 
 // ---------- Рендер ----------
 let renderQueued = false;
@@ -265,8 +266,16 @@ function renderHeader() {
   $('#panelExpand').style.display = state.settings.panelCollapsed ? '' : 'none';
   $('#panel').classList.toggle('collapsed', !!state.settings.panelCollapsed);
   const caret = icon('expandMore', 18);
+  const onBoard = ui.section === 'board' && !ui.search;
+  $('#viewToggle').style.display = $('#newNoteBtn').style.display = onBoard || ui.section === 'boards' ? 'none' : '';
   let h;
-  if (ui.search) h = `<span class="crumb cur">Поиск: «${esc(ui.search.trim())}»</span>`;
+  if (onBoard) {
+    const b = getBoard(ui.boardId);
+    const f = b?.folderId && getFolder(b.folderId);
+    h = '<button class="crumb" data-key="boards">Доски</button><span class="sep">/</span>'
+      + (f ? `<button class="crumb" data-folder="${f.id}">${icon('folder', 16)}${esc(f.name)}</button><span class="sep">/</span>` : '')
+      + (b ? `<button class="crumb cur" data-act="bmenu" data-board="${b.id}" title="Действия с доской">${esc(b.name)}${caret}</button>` : '');
+  } else if (ui.search) h = `<span class="crumb cur">Поиск: «${esc(ui.search.trim())}»</span>`;
   else if (ui.section === 'folder') {
     const path = folderPath(ui.folderId);
     h = '<button class="crumb" data-key="notes">Все заметки</button>' + path.map((f, i) => '<span class="sep">/</span>' + (i < path.length - 1
@@ -282,9 +291,9 @@ function renderHeader() {
 
 // Узкая панель с иконками разделов
 function renderRail() {
-  const cur = ['folder', 'label'].includes(ui.section) ? 'notes' : ui.section;
+  const cur = ['folder', 'label'].includes(ui.section) ? 'notes' : ui.section === 'board' ? 'boards' : ui.section;
   const remCount = state.notes.filter((n) => n.reminder && !n.trashed && !n.reminderFired).length;
-  const items = [['notes', 'bulb', 'Заметки'], ['reminders', 'bell', 'Напоминания'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
+  const items = [['notes', 'bulb', 'Заметки'], ['boards', 'board', 'Доски'], ['reminders', 'bell', 'Напоминания'], ['files', 'attach', 'Файлы'], ['archive', 'archive', 'Архив'], ['trash', 'delete', 'Корзина']];
   $('#railNav').innerHTML = items.map(([key, ic, t]) =>
     `<button class="rail-item${key === cur && !ui.search ? ' active' : ''}" data-key="${key}" title="${t}">${icon(ic, 22)}${key === 'reminders' && remCount ? `<span class="rail-badge">${remCount}</span>` : ''}</button>`).join('');
 }
@@ -452,12 +461,20 @@ function fcardHTML(f) {
 function renderNotes() {
   clearTimeout(notesTimer);
   const c = $('#content');
+  if (ui.section === 'board' && !ui.search) { cardRO.disconnect(); ui.selected.clear(); renderSelbar(); showBoard(); return; }
+  leaveBoard();
   cardRO.disconnect();
   const notes = visibleNotes();
   const view = state.settings.view;
   let html = '';
   if (ui.section === 'trash' && !ui.search) {
     html += `<div class="trash-bar">Заметки в корзине удаляются через ${TRASH_DAYS} дней.${notes.length ? '<button class="text-btn" data-global="empty-trash">Очистить корзину</button>' : ''}</div>`;
+  }
+  if (ui.section === 'boards' && !ui.search) {
+    c.innerHTML = boardsSectionHTML([...state.boards].sort((a, b) => b.updatedAt - a.updatedAt), 'Доски')
+      + (state.boards.length ? '' : '<div class="empty compact">Доска — бесконечный холст для схем, идей и планов: стикеры, стрелки, рисунки, заметки и файлы.</div>');
+    ui.selected.clear(); renderSelbar();
+    return;
   }
   // Экран «Файлы» со всеми файлами
   if (ui.section === 'files' && !ui.search) {
@@ -469,6 +486,10 @@ function renderNotes() {
     const q = ui.search.trim().toLowerCase();
     const hits = allFiles().filter((e) => e.f.name.toLowerCase().includes(q));
     if (hits.length) html += `<div class="section"><h2 class="sec-h">Файлы<span class="sec-count">${hits.length}</span></h2>${filesTableHTML(hits)}</div>`;
+  }
+  if (ui.search && ui.section !== 'trash') {
+    const found = searchBoards(ui.search.trim().toLowerCase());
+    if (found.length) html += boardsSectionHTML(found, 'Доски', null, false);
   }
   // Папки с тегом и найденные папки
   let tagFolders = [];
@@ -484,6 +505,7 @@ function renderNotes() {
     html += `<div class="section"><h2 class="sec-h">${ui.section === 'folder' ? 'Вложенные папки' : 'Папки'}</h2><div class="fgrid">${subs.map(fcardHTML).join('')}`
       + `<button class="fcard fnew" data-global="new-folder" title="Новая папка">${icon('folderNew', 34)}<div class="fname">Новая папка</div></button></div></div>`;
     if (ui.section === 'folder') {
+      html += boardsSectionHTML(boardsIn(ui.folderId), 'Доски', ui.folderId);
       html += filesSectionHTML(allFiles().filter((e) => e.folderId === ui.folderId && !e.note?.archived), 'Файлы', { folderId: ui.folderId, showWhere: false });
     } else {
       const recent = allFiles();
@@ -1211,7 +1233,7 @@ function allFiles() {
   return out.sort((a, b) => (b.f.addedAt || 0) - (a.f.addedAt || 0));
 }
 const findFile = (id) => allFiles().find((e) => e.f.id === id);
-const referencedFiles = () => [...state.files, ...state.notes.flatMap((n) => n.files || [])].map((f) => f.stored).filter(Boolean);
+const referencedFiles = () => [...state.files, ...state.notes.flatMap((n) => n.files || []), ...boardFiles()].map((f) => f.stored).filter(Boolean);
 
 // Копирует файлы (из проводника, буфера или окна выбора) в хранилище программы
 async function importFileObjects(list) {
@@ -1382,6 +1404,7 @@ async function deleteFolder(id) {
   const parent = f.parentId;
   state.folders = state.folders.filter((x) => !ids.includes(x.id));
   state.notes.forEach((n) => { if (ids.includes(n.folderId)) n.folderId = null; });
+  state.boards.forEach((b) => { if (ids.includes(b.folderId)) b.folderId = null; });
   if (ui.section === 'folder' && ids.includes(ui.folderId)) {
     if (parent && getFolder(parent)) ui.folderId = parent; else { ui.section = 'notes'; ui.folderId = null; }
   }
@@ -1392,6 +1415,7 @@ function folderMenu(anchor, id) {
     ['Открыть', () => setSection('folder:' + id)],
     ['Новая подпапка', () => newFolderFlow(id)],
     ['Новая заметка в папке', () => { setSection('folder:' + id); renderAll(); openComposer('text'); }],
+    ['Новая доска в папке', () => createBoard('empty', id)],
     ['Теги папки…', () => { const f = getFolder(id); if (f) labelPopover(anchor, folderLabelOps(f)); }],
     ['Переименовать', () => startRenameFolder(id)],
     ['Удалить папку', () => deleteFolder(id)],
@@ -1536,7 +1560,7 @@ function showShortcuts() {
   const el = document.createElement('div');
   el.className = 'dialog';
   const rows = [
-    ['C', 'Новая заметка'], ['L', 'Новый список'], ['N', 'Новая папка'], ['/', 'Поиск'], ['Ctrl + G', 'Сетка / список'],
+    ['C', 'Новая заметка'], ['L', 'Новый список'], ['N', 'Новая папка'], ['На доске: V H N T R O D A P E F', 'Инструменты'], ['На доске: пробел + мышь', 'Перемещение'], ['/', 'Поиск'], ['Ctrl + G', 'Сетка / список'],
     ['Ctrl + Z', 'Отменить последнее действие'], ['Esc', 'Закрыть заметку или меню'],
     ['Enter (в списке)', 'Новый пункт'], ['Backspace (в начале пункта)', 'Объединить с предыдущим'],
     ['Ctrl + V (в заметке)', 'Вставить картинку из буфера'],
@@ -1549,7 +1573,7 @@ function showAbout() {
   const el = document.createElement('div');
   el.className = 'dialog';
   const total = state.notes.filter((n) => !n.trashed).length;
-  el.innerHTML = `<div class="dlg-title">Заметки 1.3</div><div class="dlg-text">Заметки и списки для компьютера. Все данные хранятся только на этом компьютере.<br><br>Заметок: ${total}, папок: ${state.folders.length}, тегов: ${state.labels.length}.</div><div class="dlg-actions"><button class="text-btn">OK</button></div>`;
+  el.innerHTML = `<div class="dlg-title">Заметки 1.4</div><div class="dlg-text">Заметки и списки для компьютера. Все данные хранятся только на этом компьютере.<br><br>Заметок: ${total}, папок: ${state.folders.length}, тегов: ${state.labels.length}.</div><div class="dlg-actions"><button class="text-btn">OK</button></div>`;
   const close = openDialog(el);
   $('.text-btn', el).addEventListener('click', close);
 }
@@ -1790,7 +1814,7 @@ function cleanupTrash() {
 
 // ---------- Импорт / экспорт ----------
 function exportNotes() {
-  window.api.exportData({ app: 'zametki', version: 1, exportedAt: new Date().toISOString(), notes: state.notes, labels: state.labels, folders: state.folders, files: state.files })
+  window.api.exportData({ app: 'zametki', version: 1, exportedAt: new Date().toISOString(), notes: state.notes, labels: state.labels, folders: state.folders, files: state.files, boards: state.boards })
     .then((ok) => { if (ok) showSnack('Заметки экспортированы'); });
 }
 async function importNotes() {
@@ -1812,15 +1836,25 @@ async function importNotes() {
       const fmap = {};
       (d.folders || []).forEach((f) => { if (f && f.id) fmap[f.id] = uid(); });
       (d.folders || []).forEach((f) => { if (f && f.id) state.folders.push({ id: fmap[f.id], name: String(f.name || 'Папка'), parentId: fmap[f.parentId] || null, labels: (f.labels || []).map((x) => map[x]).filter(Boolean) }); });
+      const nmap = {};
       for (const n of d.notes) {
         if (!n || typeof n !== 'object') continue;
         const nn = { ...newNote(), ...n };
         if (!nn.id || getNote(nn.id)) nn.id = uid();
+        nmap[n.id] = nn.id;
         nn.labels = (n.labels || []).map((id) => map[id]).filter(Boolean);
         nn.folderId = fmap[n.folderId] || null;
         nn.items = Array.isArray(nn.items) ? nn.items : [];
         nn.images = Array.isArray(nn.images) ? nn.images : [];
         imported.push(nn);
+      }
+      for (const b of d.boards || []) {
+        if (!b || !Array.isArray(b.elements)) continue;
+        const nb = normalizeBoard(JSON.parse(JSON.stringify(b)));
+        if (getBoard(nb.id)) nb.id = uid();
+        nb.folderId = fmap[b.folderId] || null;
+        nb.elements.forEach((el) => { if (el.noteId) el.noteId = nmap[el.noteId] || el.noteId; });
+        state.boards.push(nb);
       }
     } else if ('textContent' in d || 'listContent' in d || 'userEditedTimestampUsec' in d) {
       // Файл заметки Google Keep из Google Takeout
@@ -1868,8 +1902,9 @@ async function openAppMenu(btn) {
 function setSection(key) {
   closeComposer();
   closePopover();
-  ui.labelId = null; ui.folderId = null;
-  if (key.startsWith('label:')) { ui.section = 'label'; ui.labelId = key.slice(6); }
+  ui.labelId = null; ui.folderId = null; ui.boardId = null;
+  if (key.startsWith('board:')) { ui.section = 'board'; ui.boardId = key.slice(6); }
+  else if (key.startsWith('label:')) { ui.section = 'label'; ui.labelId = key.slice(6); }
   else if (key.startsWith('folder:')) { ui.section = 'folder'; ui.folderId = key.slice(7); expandTo(ui.folderId); }
   else ui.section = key;
   ui.search = '';
@@ -1974,6 +2009,7 @@ function bindEvents() {
     if (b.dataset.act === 'goto-label') setSection('label:' + b.dataset.label);
     else if (b.dataset.act === 'ftags') { const f = getFolder(b.dataset.folder); if (f) labelPopover(b, folderLabelOps(f)); }
     else if (b.dataset.act === 'fmenu') folderMenu(b, b.dataset.folder);
+    else if (b.dataset.act === 'bmenu') boardMenu(b, b.dataset.board);
     else if (b.dataset.act === 'tmenu') tagMenu(b, b.dataset.label);
     else if (b.dataset.folder) setSection('folder:' + b.dataset.folder);
     else if (b.dataset.key) setSection(b.dataset.key);
@@ -1984,6 +2020,16 @@ function bindEvents() {
 
   const content = $('#content');
   content.addEventListener('click', (e) => {
+    if (e.target.closest('.bv')) return;
+    const nbBtn = e.target.closest('[data-global="new-board"]');
+    if (nbBtn) { if (popover && popover.anchor === nbBtn) closePopover(); else newBoardMenu(nbBtn, nbBtn.dataset.folder || null); return; }
+    const bc = e.target.closest('.bcard[data-board]');
+    if (bc) {
+      const mb = e.target.closest('[data-act="bmenu"]');
+      if (!mb) setSection('board:' + bc.dataset.board);
+      else if (popover && popover.anchor === mb) closePopover(); else boardMenu(mb, bc.dataset.board);
+      return;
+    }
     if (e.target.closest('[data-global="empty-trash"]')) { emptyTrash(); return; }
     if (e.target.closest('[data-global="new-folder"]')) { newFolderFlow(ui.section === 'folder' ? ui.folderId : null); return; }
     const up = e.target.closest('[data-global="upload"]');
@@ -2064,7 +2110,7 @@ function bindEvents() {
   const isFileDrag = (e) => !cardDragId && e.dataTransfer && [...e.dataTransfer.types].includes('Files');
   const dropFolder = () => (ui.section === 'folder' ? ui.folderId : null);
   mainEl.addEventListener('dragover', (e) => {
-    if (!isFileDrag(e) || e.target.closest('.editor')) return;
+    if (!isFileDrag(e) || ui.section === 'board' || e.target.closest('.editor')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     const f = dropFolder() && getFolder(dropFolder());
@@ -2074,7 +2120,7 @@ function bindEvents() {
     dropTimer = setTimeout(hideDrop, 200);
   });
   mainEl.addEventListener('drop', async (e) => {
-    if (!isFileDrag(e) || e.target.closest('.editor')) return;
+    if (!isFileDrag(e) || ui.section === 'board' || e.target.closest('.editor')) return;
     e.preventDefault();
     hideDrop();
     const files = [...e.dataTransfer.files];
@@ -2095,6 +2141,7 @@ function bindEvents() {
 
   document.addEventListener('keydown', (e) => {
     const typing = !!e.target.closest?.('input, textarea, select, [contenteditable]');
+    if (ui.section === 'board' && !ui.search && !popover && !dialogs.length && !modal && boardKey(e)) return;
     if (e.key === 'Escape') {
       if (popover) { closePopover(); return; }
       if (dialogs.length) { dialogs[dialogs.length - 1].close(); return; }
@@ -2114,6 +2161,7 @@ function bindEvents() {
   });
 
   new ResizeObserver(updateGridWidth).observe($('#main'));
+  bindBoardGlobal();
 
   window.api.onOpenNote((id) => {
     const n = getNote(id);
@@ -2159,6 +2207,7 @@ async function init() {
     state.folders = Array.isArray(state.folders) ? state.folders : [];
     state.files = Array.isArray(state.files) ? state.files : [];
     state.folders.forEach((f) => { if (!Array.isArray(f.labels)) f.labels = []; });
+    state.boards = (Array.isArray(state.boards) ? state.boards : []).map(normalizeBoard);
     state.notes = state.notes.map((n) => ({ ...newNote(), ...n }));
     if (!data.settings?.designV2) { state.settings.theme = 'dark'; state.settings.designV2 = true; state.version = 2; save(); }
   } else {
